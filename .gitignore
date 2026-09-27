@@ -1,0 +1,5 @@
+node_modules/
+.DS_Store
+npm-debug.log*
+# original logo drafts (the game uses public/assets/logo.png)
+/image*.png

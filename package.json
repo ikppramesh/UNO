@@ -1,0 +1,19 @@
+{
+  "name": "uno-ultimate",
+  "version": "1.0.0",
+  "description": "Multiplayer web UNO with pluggable game modes (Classic, Flip, No Mercy, Liar's) and themes.",
+  "main": "server/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node tests/simulate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
