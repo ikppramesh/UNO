@@ -218,7 +218,7 @@ class RoomManager {
     this.assertLobby(room);
     if (room.members.length >= MAX_PLAYERS) throw new UserError(`Maximum ${MAX_PLAYERS} players`);
     const used = new Set(room.members.map((m) => m.name));
-    const name = BOT_NAMES.map((n) => `🤖 ${n}`).find((n) => !used.has(n)) || `🤖 Bot ${room.members.length + 1}`;
+    const name = BOT_NAMES.find((n) => !used.has(n)) || `Bot ${room.members.length + 1}`;
     room.members.push({ id: uid(), name, isBot: true, token: null, socketId: null, connected: true });
     this.broadcast(room);
   }

@@ -69,12 +69,22 @@
     return p ? p.name : (memberOf(id) || {}).name || '?';
   };
 
+  function avatar(name) {
+    let h = 0;
+    for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return `<span class="avatar" style="--av:${h}">${esc(name.charAt(0).toUpperCase())}</span>`;
+  }
+  // Stable pseudo-random tilt for a card, so the pile looks hand-dropped.
+  const tilt = (id, range) => (((id * 7919) % 1000) / 1000 - 0.5) * range;
+
   // ---------- theme + effects ----------
   function applyTheme(th, side) {
     const root = document.documentElement.style;
-    root.setProperty('--table', side ? th.table.dark : th.table.light);
+    root.setProperty('--room', th.room);
+    root.setProperty('--felt', side ? th.felt.dark : th.felt.light);
+    root.setProperty('--rim1', th.rim[0]);
+    root.setProperty('--rim2', th.rim[1]);
     root.setProperty('--accent', th.accent);
-    root.setProperty('--font', th.font);
     document.body.classList.toggle('dark-side', !!side);
     if (lastFxTheme !== th) {
       lastFxTheme = th;
@@ -284,9 +294,10 @@
     $('player-count').textContent = `(${room.members.length}/${room.maxPlayers})`;
     $('member-list').innerHTML = room.members.map((m) => `
       <li class="${m.connected ? '' : 'offline'}">
-        <span class="avatar">${m.isBot ? '🤖' : esc(m.name.charAt(0).toUpperCase())}</span>
+        ${avatar(m.name)}
         <span class="mname">${esc(m.name)}${m.id === room.youId ? ' <span class="muted">(you)</span>' : ''}</span>
-        ${m.id === room.hostId ? '<span class="tag">👑 host</span>' : ''}
+        ${m.isBot ? '<span class="tag">CPU</span>' : ''}
+        ${m.id === room.hostId ? '<span class="tag gold">Host</span>' : ''}
         ${!m.connected ? '<span class="tag">offline</span>' : ''}
         ${isHost && m.id !== room.youId ? `<button class="btn ghost small" data-kick="${m.id}" title="Remove">✕</button>` : ''}
       </li>`).join('');
@@ -359,56 +370,68 @@
     $('opponents').innerHTML = order.map((p) => {
       const m = memberOf(p.id);
       const offline = m && !m.connected && !m.isBot;
-      const shown = Math.min(p.count, 12);
+      const shown = Math.min(p.count, 10);
       let minis = '';
       for (let i = 0; i < shown; i++) {
-        minis += p.backs && p.backs[i] ? renderFace(p.backs[i], th, { side: 1 - g.side, extraClass: 'mini' }) : renderBack(th, 'mini');
+        const rot = shown > 1 ? (i - (shown - 1) / 2) * Math.min(9, 50 / shown) : 0;
+        const style = `--rot:${rot.toFixed(1)}deg;`;
+        minis += p.backs && p.backs[i] ? renderFace(p.backs[i], th, { side: 1 - g.side, extraClass: 'mini', style }) : renderBack(th, 'mini', style);
       }
       return `<div class="opp ${p.id === g.actorId ? 'turn' : ''} ${p.out ? 'out' : ''} ${offline ? 'offline' : ''}">
         <div class="opp-head">
-          <span class="avatar">${p.isBot ? '🤖' : esc(p.name.charAt(0).toUpperCase())}</span>
+          ${avatar(p.name)}
           <span class="opp-name">${esc(p.name)}</span>
+          ${p.isBot ? '<span class="tag">CPU</span>' : ''}
         </div>
         <div class="opp-cards">${minis}${p.count > shown ? `<span class="more">+${p.count - shown}</span>` : ''}</div>
         <div class="opp-meta">
-          <span class="count">${p.out ? '💀 OUT' : p.count + (p.count === 1 ? ' card' : ' cards')}</span>
-          ${p.saidUno && p.count === 1 ? '<span class="tag uno-tag">UNO!</span>' : ''}
+          <span class="count">${p.out ? 'Out' : p.count + (p.count === 1 ? ' card' : ' cards')}</span>
+          ${p.saidUno && p.count === 1 ? '<span class="tag uno-tag">UNO</span>' : ''}
           ${offline ? '<span class="tag">offline</span>' : ''}
         </div>
       </div>`;
     }).join('');
 
     // Piles
-    $('draw-pile').innerHTML = (g.drawTopBack ? renderFace(g.drawTopBack, th, { side: 1 - g.side }) : renderBack(th)) + `<span class="pile-count">${g.drawCount}</span>`;
-    const topKey = JSON.stringify(g.top) + g.log.length;
-    $('discard-pile').innerHTML = renderFace(g.top.face, th, { side: g.side, extraClass: topKey !== lastTopKey ? 'land' : '' })
-      + (g.top.claimed ? '<span class="claim-badge" title="Played face-down — this is what was claimed">?</span>' : '');
+    const depth = Math.min(4, Math.ceil(g.drawCount / 25));
+    let stack = '';
+    for (let i = depth - 1; i >= 1; i--) stack += renderBack(th, 'under', `--dx:${i * 1.5}px;--dy:${i * 1.5}px;`);
+    const drawTop = g.drawTopBack ? renderFace(g.drawTopBack, th, { side: 1 - g.side }) : renderBack(th);
+    $('draw-pile').innerHTML = g.drawCount ? stack + drawTop + `<span class="pile-count">${g.drawCount}</span>` : '<div class="pile-empty"></div>';
+
+    const recent = g.recent || [{ id: 0, face: g.top.face, claimed: g.top.claimed }];
+    const topKey = recent.map((r) => r.id).join(',') + ':' + g.log.length;
+    $('discard-pile').innerHTML = recent.map((r, i) => {
+      const last = i === recent.length - 1;
+      const style = `--rot:${tilt(r.id, 34).toFixed(1)}deg;--dx:${tilt(r.id + 3, 14).toFixed(1)}px;--dy:${tilt(r.id + 5, 10).toFixed(1)}px;`;
+      return renderFace(r.face, th, { side: g.side, style, extraClass: `pile-card ${last && topKey !== lastTopKey ? 'land' : ''}` });
+    }).join('') + (g.top.claimed ? '<span class="claim-badge" title="Played face-down — this is what was claimed">?</span>' : '');
     lastTopKey = topKey;
 
     const colorLabel = th.colors[g.color] ? th.colors[g.color].label : g.color;
-    $('color-indicator').innerHTML = `<span class="dot" style="--cc:${colorHex(g.color, th)}"></span><span>${esc(colorLabel)}</span>`;
-    $('dir-indicator').innerHTML = `<span class="dir-arrow ${g.direction === 1 ? '' : 'ccw'}">↻</span><span class="small muted">${g.direction === 1 ? 'Clockwise' : 'Counter'}</span>`;
+    $('color-indicator').innerHTML = `<span class="chip-token" style="--cc:${colorHex(g.color, th)}"></span><span>${esc(colorLabel)}</span>`;
+    $('dir-ring').classList.toggle('ccw', g.direction !== 1);
     $('pending-indicator').classList.toggle('hidden', !g.pendingDraw);
-    $('pending-indicator').textContent = `+${g.pendingDraw} stacked!`;
+    $('pending-indicator').textContent = `+${g.pendingDraw} stacked`;
     $('side-indicator').classList.toggle('hidden', !g.rules.flip);
-    $('side-indicator').textContent = g.side ? '🌑 DARK SIDE' : '☀️ LIGHT SIDE';
+    $('side-indicator').textContent = g.side ? 'Dark side' : 'Light side';
 
     // Status line
     const myTurn = g.phase === 'play' && g.turnId === myId;
     const actorName = nameOf(g.actorId);
     let status;
     if (g.phase === 'over') {
-      status = `🏆 ${esc(nameOf(g.winnerId))} wins!`;
+      status = `${esc(nameOf(g.winnerId))} wins`;
       if (room.hostId === myId) status += ' <button class="btn primary small" id="btn-again">Play again</button> <button class="btn small" id="btn-to-lobby">Lobby</button>';
     }
-    else if (mine && mine.out) status = '💀 You are out — watch the rest of the game.';
+    else if (mine && mine.out) status = 'You are out — watch the rest of the game.';
     else if (g.actorId === myId) {
       if (g.phase === 'liarChallenge') status = 'Believe the card, or call LIAR?';
       else if (g.phase === 'roulette') status = 'Colour Roulette — pick a colour!';
       else if (g.phase === 'chooseColor') status = 'Pick the new colour';
       else if (g.pendingDraw) status = `Your turn — stack a draw card or take +${g.pendingDraw}`;
       else if (g.me.drawnCardId != null) status = 'Play the card you drew, or pass';
-      else if (g.rules.liar) status = 'Your turn — play any card face-down (bluffing allowed!) or draw';
+      else if (g.rules.liar) status = 'Your turn — play any card face-down (bluffing allowed) or draw';
       else status = g.me.playable.length ? 'Your turn — play a highlighted card' : 'Your turn — no match, draw a card';
     } else status = `Waiting for <b>${esc(actorName)}</b>…`;
     $('status').innerHTML = status;
@@ -454,7 +477,7 @@
       lastRevealSeq = g.lastReveal.seq;
       const r = g.lastReveal;
       banner(`<div class="reveal ${r.honest ? 'honest' : 'liar'}">
-        <div class="reveal-title">${r.honest ? '😇 It was the truth!' : '🤥 BLUFF CAUGHT!'}</div>
+        <div class="reveal-title">${r.honest ? 'It was the truth' : 'Bluff caught'}</div>
         <div class="reveal-cards">
           <div><div class="small muted">Claimed</div>${renderFace(r.claim, th, { side: g.side })}</div>
           <div><div class="small muted">Actually</div>${renderFace(r.face, th, { side: g.side })}</div>
@@ -472,9 +495,16 @@
     const cw = cards[0].offsetWidth || 80;
     const avail = el.clientWidth - 24;
     const n = cards.length;
-    let gap = 8;
-    if (n > 1 && n * cw + (n - 1) * gap > avail) gap = Math.max(-cw * 0.62, (avail - cw) / (n - 1) - cw);
+    let gap = -cw * 0.28;
+    if (n > 1 && n * cw + (n - 1) * gap > avail) gap = Math.max(-cw * 0.66, (avail - cw) / (n - 1) - cw);
     el.style.setProperty('--gap', gap + 'px');
+    // Fan the cards like a hand being held: rotate around a point below the hand.
+    const spread = Math.min(3.2, 36 / Math.max(n, 1));
+    cards.forEach((c, i) => {
+      const off = i - (n - 1) / 2;
+      c.style.setProperty('--rot', (off * spread).toFixed(2) + 'deg');
+      c.style.setProperty('--ty', Math.min(18, Math.abs(off) ** 2 * spread * 0.22).toFixed(1) + 'px');
+    });
   }
   window.addEventListener('resize', () => { if (room && room.game) layoutHand(); });
 
@@ -498,8 +528,8 @@
       const isHost = room.hostId === myId;
       const won = g.winnerId === myId;
       openModal(`<div class="gameover">
-          <div class="trophy">${won ? '🏆' : '🎴'}</div>
-          <h2>${won ? 'You win!' : `${esc(nameOf(g.winnerId))} wins!`}</h2>
+          <div class="go-kicker">${won ? 'Victory' : 'Game over'}</div>
+          <h2>${won ? 'You win' : `${esc(nameOf(g.winnerId))} wins`}</h2>
           <p class="muted">${esc(g.variantName)}</p>
           ${isHost
             ? '<div class="row center"><button class="btn primary" data-value="again">Play again</button><button class="btn" data-value="lobby">Back to lobby</button></div>'
@@ -516,12 +546,12 @@
       openModal(`<h2>${esc(nameOf(p.liarId))} claims:</h2>
         <div class="center-card">${renderFace(p.claim, th, { side: g.side })}</div>
         <p class="muted">Call LIAR and you win if they bluffed (they take the card back +2). Wrong guess and <b>you</b> draw 2.</p>
-        <div class="row center"><button class="btn" data-value="believe">😌 I believe you</button><button class="btn danger" data-value="liar">🤥 LIAR!</button></div>`,
+        <div class="row center"><button class="btn" data-value="believe">I believe you</button><button class="btn danger" data-value="liar">Liar!</button></div>`,
       { key, kind: 'phase' }).then((v) => { if (v) sendAction({ type: 'challenge', call: v === 'liar' }); });
       return;
     }
     if (g.phase === 'roulette' || g.phase === 'chooseColor') {
-      const title = g.phase === 'roulette' ? '🎯 Colour Roulette! Pick a colour — you draw until it shows up' : 'The deck flipped onto a wild — pick a colour';
+      const title = g.phase === 'roulette' ? 'Colour Roulette — pick a colour. You draw until it shows up.' : 'The deck flipped onto a wild — pick a colour';
       pickColor(title, { key, kind: 'phase', dismissable: false }).then((c) => { if (c) sendAction({ type: 'chooseColor', color: c }); });
     }
   }

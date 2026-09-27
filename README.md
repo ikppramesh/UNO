@@ -57,7 +57,9 @@ This prints a public `https://….trycloudflare.com` link that works while your 
 ## Adding your own modes and themes
 
 ### A new theme
-Edit [public/js/themes.js](public/js/themes.js): copy an existing theme block, give it a new key, and change the colours, names, icons, card back and background. It appears in the theme menus automatically.
+Edit [public/js/themes.js](public/js/themes.js): copy an existing theme block, give it a new key, and change the card colours and their names, the action-card names, the table cloth, the table edge, and the printed card back. It appears in the theme menus automatically.
+
+To preview your theme, open http://localhost:3000/dev/gallery.html. It shows every card type in every theme.
 
 ### A new game mode
 1. Copy [server/variants/megadraw.js](server/variants/megadraw.js) to a new file.

@@ -184,7 +184,7 @@ class Game {
       p.out = true;
       this.drawPile = shuffle(this.drawPile.concat(p.hand));
       p.hand = [];
-      this.addLog(['💀 ', { player: p.name }, ` reached ${this.rules.mercyLimit} cards and is OUT (no mercy)!`]);
+      this.addLog([{ player: p.name }, ` reached ${this.rules.mercyLimit} cards and is OUT (no mercy)!`]);
       if (this.activeCount() === 1) this.finish(this.players.find((x) => !x.out));
     }
   }
@@ -194,7 +194,7 @@ class Game {
     this.pending = null;
     this.pendingDraw = 0;
     this.winnerId = p.id;
-    this.addLog(['🏆 ', { player: p.name }, ' wins the game!']);
+    this.addLog([{ player: p.name }, ' wins the game!']);
   }
 
   clearUnoWindow(actor) {
@@ -325,7 +325,7 @@ class Game {
         const victim = this.players[this.nextIndex(this.turn)];
         this.phase = 'roulette';
         this.pending = { victimId: victim.id };
-        this.addLog(['🎯 Colour Roulette! ', { player: victim.name }, ' must pick a colour and draw until it appears.']);
+        this.addLog(['Colour Roulette! ', { player: victim.name }, ' must pick a colour and draw until it appears.']);
         break;
       }
       case 'wildDrawColor': {
@@ -357,7 +357,7 @@ class Game {
 
   doFlip(p) {
     this.side = 1 - this.side;
-    this.addLog(['🔄 ', { player: p.name }, ` flipped everything to the ${this.side ? 'DARK' : 'LIGHT'} side!`]);
+    this.addLog([{ player: p.name }, ` flipped everything to the ${this.side ? 'DARK' : 'LIGHT'} side!`]);
     const top = this.topFace();
     if (C.isWild(top)) {
       this.phase = 'chooseColor';
@@ -373,7 +373,7 @@ class Game {
     [a.hand, b.hand] = [b.hand, a.hand];
     a.saidUno = b.saidUno = false;
     this.unoVulnerable = null;
-    this.addLog(['🔁 ', { player: a.name }, ' swaps hands with ', { player: b.name }, '.']);
+    this.addLog([{ player: a.name }, ' swaps hands with ', { player: b.name }, '.']);
   }
 
   rotateHands() {
@@ -386,7 +386,7 @@ class Game {
       this.players[i].saidUno = false;
     }
     this.unoVulnerable = null;
-    this.addLog(['🔃 Everyone passes their hand ', this.direction === 1 ? 'clockwise' : 'counter-clockwise', '!']);
+    this.addLog(['Everyone passes their hand ', this.direction === 1 ? 'clockwise' : 'counter-clockwise', '!']);
   }
 
   draw(p) {
@@ -445,7 +445,7 @@ class Game {
     if (p.saidUno) return null;
     p.saidUno = true;
     if (this.unoVulnerable === p.id) this.unoVulnerable = null;
-    this.addLog(['📣 ', { player: p.name }, ' shouts UNO!']);
+    this.addLog([{ player: p.name }, ' shouts UNO!']);
     return null;
   }
 
@@ -454,7 +454,7 @@ class Game {
     const t = this.byId(targetId);
     this.unoVulnerable = null;
     this.give(t, 2);
-    this.addLog(['🚨 ', { player: p.name }, ' caught ', { player: t.name }, ' forgetting to say UNO! +2 cards.']);
+    this.addLog([{ player: p.name }, ' caught ', { player: t.name }, ' forgetting to say UNO! +2 cards.']);
     return null;
   }
 
@@ -476,13 +476,13 @@ class Game {
     const honest = C.sameFace(real, claim);
     this.lastReveal = { seq: this.logSeq + 1, face: C.cleanFace(real), claim, honest, liarId, challengerId: p.id };
     if (honest) {
-      this.addLog(['😇 ', { player: p.name }, ' called LIAR — but ', { player: liar.name }, ' told the truth! ', { player: p.name }, ' draws 2.']);
+      this.addLog([{ player: p.name }, ' called LIAR — but ', { player: liar.name }, ' told the truth! ', { player: p.name }, ' draws 2.']);
       this.give(p, 2);
       if (this.phase === 'over') return null;
       this.resolvePlay(liar, claim, opts, false);
       return null;
     }
-    this.addLog(['🤥 ', { player: p.name }, ' caught ', { player: liar.name }, ' bluffing! It was really ', { face: real }, '. Card back + 2 cards.']);
+    this.addLog([{ player: p.name }, ' caught ', { player: liar.name }, ' bluffing! It was really ', { face: real }, '. Card back + 2 cards.']);
     this.discard.pop();
     liar.hand.push(card);
     this.give(liar, 2);
@@ -545,6 +545,7 @@ class Game {
       phase: this.phase,
       pendingDraw: this.pendingDraw,
       top: { face: this.topFace(), claimed: !!top.claim },
+      recent: this.discard.slice(-4).map((e) => ({ id: e.card.id, face: e.claim || this.face(e.card), claimed: !!e.claim })),
       drawCount: this.drawPile.length,
       drawTopBack: this.rules.flip && this.drawPile.length ? this.backFace(this.drawPile[this.drawPile.length - 1]) : null,
       players: this.players.map((p) => ({

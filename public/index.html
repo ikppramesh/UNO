@@ -7,7 +7,7 @@
   <meta name="description" content="Play UNO online with friends or against the computer — Classic, Flip, No Mercy, Liar's UNO and more.">
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Archivo:ital,wght@1,800;1,900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -23,14 +23,14 @@
       </label>
 
       <div id="join-invite" class="panel invite hidden">
-        <h2>You're invited! 🎉</h2>
+        <h2>You're invited</h2>
         <p>Join room <b id="invite-code"></b></p>
         <button id="btn-accept-invite" class="btn primary big">Join game</button>
       </div>
 
       <div class="home-grid">
         <div class="panel">
-          <h2>🤖 Play vs Computer</h2>
+          <h2>Play vs Computer</h2>
           <label class="field"><span>Game mode</span><select id="solo-variant"></select></label>
           <label class="field"><span>Theme</span><select id="solo-theme"></select></label>
           <label class="field"><span>Computer opponents</span>
@@ -43,7 +43,7 @@
         </div>
 
         <div class="panel">
-          <h2>🌍 Play with Friends</h2>
+          <h2>Play with Friends</h2>
           <p class="muted">Create a room and share the link. Friends anywhere can join, and you can fill empty seats with computer players.</p>
           <button id="btn-create" class="btn primary big">Create room</button>
           <div class="or"><span>or join with a code</span></div>
@@ -136,33 +136,42 @@
       </div>
     </header>
 
-    <div id="opponents" class="opponents"></div>
+    <main class="arena">
+      <div class="rim">
+        <div class="felt">
+          <div id="opponents" class="opponents"></div>
 
-    <div class="table">
-      <div class="table-info left">
-        <div id="dir-indicator" class="dir"></div>
-        <div id="side-indicator" class="side-badge hidden"></div>
+          <div class="table">
+            <svg id="dir-ring" class="dir-ring" viewBox="0 0 200 200" aria-hidden="true">
+              <defs><marker id="dir-head" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="currentColor"/></marker></defs>
+              <path d="M100 18 A82 82 0 0 1 182 100" marker-end="url(#dir-head)"/>
+              <path d="M100 182 A82 82 0 0 1 18 100" marker-end="url(#dir-head)"/>
+            </svg>
+            <div class="piles">
+              <div id="draw-pile" class="pile draw-pile" title="Draw a card"></div>
+              <div id="discard-pile" class="pile discard-pile"></div>
+            </div>
+            <div class="table-info">
+              <div id="color-indicator" class="color-ind"></div>
+              <div id="pending-indicator" class="pending hidden"></div>
+              <div id="side-indicator" class="side-badge hidden"></div>
+            </div>
+          </div>
+
+          <div id="status" class="status"></div>
+        </div>
       </div>
-      <div class="piles">
-        <div id="draw-pile" class="pile draw-pile" title="Draw a card"></div>
-        <div id="discard-pile" class="pile discard-pile"></div>
+
+      <div class="player-area">
+        <div class="actions">
+          <button id="btn-draw" class="btn">Draw</button>
+          <button id="btn-pass" class="btn hidden">Pass</button>
+          <button id="btn-uno" class="btn uno">UNO</button>
+          <div id="catch-buttons" class="catch-buttons"></div>
+        </div>
+        <div id="hand" class="hand"></div>
       </div>
-      <div class="table-info right">
-        <div id="color-indicator" class="color-ind"></div>
-        <div id="pending-indicator" class="pending hidden"></div>
-      </div>
-    </div>
-
-    <div id="status" class="status"></div>
-
-    <div class="actions">
-      <button id="btn-draw" class="btn">Draw</button>
-      <button id="btn-pass" class="btn hidden">Pass</button>
-      <button id="btn-uno" class="btn uno">UNO!</button>
-      <div id="catch-buttons" class="catch-buttons"></div>
-    </div>
-
-    <div id="hand" class="hand"></div>
+    </main>
 
     <aside id="log-panel" class="log-panel">
       <div class="log-head">Game log <button id="btn-log-close" class="btn ghost small">✕</button></div>
