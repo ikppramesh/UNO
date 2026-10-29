@@ -8,6 +8,7 @@ A web-based UNO game you can play against the computer or with friends anywhere,
 - **Themes:** Classic, Frozen ❄, Ramayanam 🏹, Mahabharatam ⚔
 - **House rules in the lobby:** starting hand size, stacking draw cards, draw until you can play, 7-0 swapping, liar mode, and a knock-out card limit.
 - **Custom cards in the lobby:** add cards such as *Wild Draw +15 ×4* with no code changes.
+- **One-click deploy:** put your own copy online with the *Deploy to Render* button (see below).
 - **Reconnects:** if you refresh or lose your connection, you go back to your seat. A computer plays for a disconnected player after 15 seconds.
 
 ## Run it on your computer
@@ -26,11 +27,21 @@ Open http://localhost:3000. The terminal also prints a `http://192.168.x.x:3000`
 `localhost` links only work on your own computer. For friends in other locations, the game has to run on a public server. Any Node.js host works. Two easy options:
 
 **Option A: Render (free tier, permanent link)**
-1. Push this repo to GitHub.
-2. On https://render.com choose **New → Blueprint** and select the repo. The included `render.yaml` sets everything up.
-3. You get a URL like `https://uno-ultimate.onrender.com`. Create a room there and share the invite link.
 
-(On the free tier the server sleeps when nobody is using it, so the first visit can take about 30 seconds.)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ikppramesh/UNO)
+
+1. Press the **Deploy to Render** button above. Sign in or create a free account if asked. (From your own fork, choose **New → Blueprint** on https://render.com and select your repo instead.)
+2. Render reads the included `render.yaml`, so there is nothing to configure. Press **Apply**.
+3. Wait for the build to finish (a couple of minutes). Render checks `/health` and then shows your URL, such as `https://uno-ultimate.onrender.com`.
+4. Open the URL, create a room, and share the invite link.
+
+Pushing to your repo redeploys automatically.
+
+- On the free tier the server sleeps when nobody is using it, so the first visit can take about 30 seconds.
+- Rooms live in memory, so a restart or redeploy ends games in progress.
+- If you deploy from a fork, change the repo in the button's link to your own.
+
+**Why not Vercel?** Vercel runs serverless functions, which can't keep the long-lived WebSocket connections and in-memory rooms that Socket.IO needs, so the game won't work there. Use Render, Railway, Fly.io or any host that runs a normal Node.js server.
 
 **Option B: a quick temporary tunnel from your own computer**
 ```bash
