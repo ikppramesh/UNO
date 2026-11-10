@@ -10,6 +10,8 @@ A web-based UNO game you can play against the computer or with friends anywhere,
 - **Custom cards in the lobby:** add cards such as *Wild Draw +15 ×4* with no code changes.
 - **One-click deploy:** put your own copy online with the *Deploy to Render* button (see below).
 - **Reconnects:** if you refresh or lose your connection, you go back to your seat. A computer plays for a disconnected player after 15 seconds.
+- **Spectators:** friends can press **Watch only** on an invite, or join while a game is running, to follow along without playing. Spectators can take an empty seat between games.
+- **Rematch:** when a game ends, any player can press **Rematch** to deal again with the same players.
 
 ## Run it on your computer
 

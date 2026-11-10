@@ -25,7 +25,10 @@
       <div id="join-invite" class="panel invite hidden">
         <h2>You're invited</h2>
         <p>Join room <b id="invite-code"></b></p>
-        <button id="btn-accept-invite" class="btn primary big">Join game</button>
+        <div class="row center">
+          <button id="btn-accept-invite" class="btn primary big">Join game</button>
+          <button id="btn-watch-invite" class="btn big">Watch only</button>
+        </div>
       </div>
 
       <div class="home-grid">
@@ -79,9 +82,11 @@
         <div class="panel">
           <h3>Players <span id="player-count" class="muted"></span></h3>
           <ul id="member-list" class="members"></ul>
+          <p id="spectator-line" class="muted small hidden"></p>
           <button id="btn-add-bot" class="btn host-only">+ Add computer player</button>
           <button id="btn-start" class="btn primary big host-only">Start game</button>
           <p id="wait-host" class="muted guest-only">Waiting for the host to start…</p>
+          <button id="btn-sit" class="btn primary big hidden">Take a seat</button>
         </div>
 
         <div class="panel settings">

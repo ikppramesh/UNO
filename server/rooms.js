@@ -6,6 +6,7 @@ const C = require('./engine/cards');
 const variants = require('./variants');
 
 const MAX_PLAYERS = 10;
+const MAX_SPECTATORS = 30;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const BOT_NAMES = ['Arjun', 'Maya', 'Leo', 'Priya', 'Kai', 'Zara', 'Ravi', 'Nina', 'Omar', 'Sita', 'Theo', 'Anya'];
 const DISCONNECTED_GRACE_MS = 15000; // a disconnected player's turn is auto-played after this
@@ -44,6 +45,8 @@ class RoomManager {
     on('room:remove', this.removeMember);
     on('room:start', this.start);
     on('room:lobby', this.backToLobby);
+    on('room:rematch', this.rematch);
+    on('room:sit', this.sit);
     on('game:action', this.action);
     socket.on('disconnect', () => this.onDisconnect(socket));
   }
@@ -67,6 +70,7 @@ class RoomManager {
       code: this.newCode(),
       hostId: null,
       members: [],
+      spectators: [],
       settings: { variant: variant.id, theme: 'classic', rules: { ...variant.rules }, customCards: [] },
       game: null,
       timers: {},
@@ -81,12 +85,14 @@ class RoomManager {
     return { ok: true, code: room.code };
   }
 
-  join(socket, { code, name, token }) {
+  join(socket, { code, name, token, spectate }) {
     token = cleanToken(token);
     if (!token) throw new UserError('Missing player token');
     const room = this.rooms.get(String(code || '').trim().toUpperCase());
     if (!room) throw new UserError('Room not found — check the code');
     const existing = room.members.find((m) => !m.isBot && m.token === token);
+    const watching = room.spectators.find((s) => s.token === token);
+    let spectating = !!watching;
     if (existing) {
       if (socket.data.roomCode && socket.data.roomCode !== room.code) this.leave(socket);
       if (existing.socketId && existing.socketId !== socket.id) {
@@ -96,14 +102,25 @@ class RoomManager {
       existing.socketId = socket.id;
       existing.connected = true;
       socket.data = { roomCode: room.code, memberId: existing.id };
+    } else if (watching) {
+      if (socket.data.roomCode && socket.data.roomCode !== room.code) this.leave(socket);
+      if (watching.socketId && watching.socketId !== socket.id) {
+        const old = this.io.sockets.sockets.get(watching.socketId);
+        if (old) old.data = {};
+      }
+      watching.socketId = socket.id;
+      socket.data = { roomCode: room.code };
     } else {
-      if (room.game && room.game.phase !== 'over') throw new UserError('That game has already started');
-      if (room.members.length >= MAX_PLAYERS) throw new UserError('That room is full');
+      // Anyone who asks to watch, anyone arriving mid-game, and anyone at a full table becomes a spectator.
+      const inProgress = room.game && room.game.phase !== 'over';
+      spectating = !!spectate || !!inProgress || room.members.length >= MAX_PLAYERS;
+      if (spectating && room.spectators.length >= MAX_SPECTATORS) throw new UserError('That room is full');
       this.leave(socket);
-      this.addHuman(room, socket, name, token);
+      if (spectating) this.addSpectator(room, socket, name, token);
+      else this.addHuman(room, socket, name, token);
     }
     this.broadcast(room);
-    return { ok: true, code: room.code };
+    return { ok: true, code: room.code, spectating };
   }
 
   addHuman(room, socket, name, token) {
@@ -116,7 +133,30 @@ class RoomManager {
     return m;
   }
 
+  addSpectator(room, socket, name, token) {
+    const s = { id: uid(), name: cleanName(name), token, socketId: socket.id };
+    room.spectators.push(s);
+    socket.data = { roomCode: room.code };
+    return s;
+  }
+
+  spectatorOf(socket) {
+    const room = socket.data && this.rooms.get(socket.data.roomCode);
+    return { room, spectator: room && room.spectators.find((s) => s.socketId === socket.id) };
+  }
+
+  dropSpectator(room, spectator) {
+    room.spectators = room.spectators.filter((s) => s !== spectator);
+    this.broadcast(room);
+  }
+
   leave(socket) {
+    const watch = this.spectatorOf(socket);
+    if (watch.spectator) {
+      socket.data = {};
+      this.dropSpectator(watch.room, watch.spectator);
+      return { ok: true };
+    }
     const { room, member } = this.ctx(socket, false);
     socket.data = {};
     if (!room || !member) return { ok: true };
@@ -150,11 +190,17 @@ class RoomManager {
   deleteRoom(room) {
     clearTimeout(room.timers.bot);
     clearTimeout(room.timers.catch);
+    for (const s of room.spectators) this.io.to(s.socketId).emit('room:closed');
     this.rooms.delete(room.code);
     return { ok: true };
   }
 
   onDisconnect(socket) {
+    const watch = this.spectatorOf(socket);
+    if (watch.spectator) {
+      this.dropSpectator(watch.room, watch.spectator);
+      return;
+    }
     const { room, member } = this.ctx(socket, false);
     if (!room || !member || member.socketId !== socket.id) return;
     member.connected = false;
@@ -180,7 +226,7 @@ class RoomManager {
     const { roomCode, memberId } = socket.data || {};
     const room = roomCode && this.rooms.get(roomCode);
     const member = room && room.members.find((m) => m.id === memberId);
-    if (required && (!room || !member)) throw new UserError('You are not in a room');
+    if (required && (!room || !member)) throw new UserError(room ? 'Spectators can only watch' : 'You are not in a room');
     return { room, member };
   }
 
@@ -243,12 +289,34 @@ class RoomManager {
   start(socket) {
     const { room } = this.hostCtx(socket);
     this.assertLobby(room);
+    this.startGame(room);
+  }
+
+  // Any seated player can deal again once the game is over; the seats stay the same.
+  rematch(socket) {
+    const { room } = this.ctx(socket);
+    if (!room.game || room.game.phase !== 'over') throw new UserError('The game is not over yet');
+    this.startGame(room);
+  }
+
+  startGame(room) {
     if (room.members.length < 2) throw new UserError('You need at least 2 players — add a computer player');
     const variant = variants.get(room.settings.variant);
     const rules = variants.sanitizeRules(room.settings.rules, variant);
     room.game = new Game({ players: room.members, variant, rules, customCards: room.settings.customCards });
     room.game.start();
     room.catchKey = null;
+    this.broadcast(room);
+  }
+
+  // A spectator takes an empty seat between games.
+  sit(socket) {
+    const { room, spectator } = this.spectatorOf(socket);
+    if (!spectator) throw new UserError('Only spectators can take a seat');
+    if (room.game && room.game.phase !== 'over') throw new UserError('A game is in progress');
+    if (room.members.length >= MAX_PLAYERS) throw new UserError('That room is full');
+    room.spectators = room.spectators.filter((s) => s !== spectator);
+    this.addHuman(room, socket, spectator.name, spectator.token);
     this.broadcast(room);
   }
 
@@ -277,10 +345,14 @@ class RoomManager {
       settings: room.settings,
       maxPlayers: MAX_PLAYERS,
       members: room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot, connected: m.connected })),
+      spectatorCount: room.spectators.length,
     };
     for (const m of room.members) {
       if (m.isBot || !m.socketId) continue;
-      this.io.to(m.socketId).emit('room:state', { ...base, youId: m.id, game: room.game ? room.game.view(m.id) : null });
+      this.io.to(m.socketId).emit('room:state', { ...base, youId: m.id, youSpectator: false, game: room.game ? room.game.view(m.id) : null });
+    }
+    for (const s of room.spectators) {
+      this.io.to(s.socketId).emit('room:state', { ...base, youId: s.id, youSpectator: true, game: room.game ? room.game.view(s.id) : null });
     }
     this.scheduleBots(room);
   }

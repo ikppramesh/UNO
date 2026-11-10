@@ -162,16 +162,19 @@
     $('join-code').value = inviteCode;
   }
 
-  async function joinRoom(code) {
+  async function joinRoom(code, spectate = false) {
     const name = getName();
     if (!name) return;
-    const res = await emit('room:join', { code, name, token });
+    const res = await emit('room:join', { code, name, token, spectate });
     if (!res.ok) return toast(res.error);
     store.set('room', res.code);
+    store.set('spectate', res.spectating ? '1' : null);
     setUrlRoom(res.code);
+    if (res.spectating && !spectate) toast('A game is in progress — you are watching');
   }
 
   $('btn-accept-invite').onclick = () => joinRoom(inviteCode);
+  $('btn-watch-invite').onclick = () => joinRoom(inviteCode, true);
   $('btn-join').onclick = () => {
     const code = $('join-code').value.trim().toUpperCase();
     if (code.length < 4) return toast('Enter the room code');
@@ -207,6 +210,7 @@
   function leaveRoom() {
     emit('room:leave');
     store.set('room', null);
+    store.set('spectate', null);
     setUrlRoom(null);
     room = null;
     closeModal();
@@ -233,6 +237,16 @@
   }
   $('btn-add-bot').onclick = async () => { const r = await emit('room:addBot'); if (!r.ok) toast(r.error); };
   $('btn-start').onclick = async () => { const r = await emit('room:start'); if (!r.ok) toast(r.error); };
+  async function takeSeat() {
+    const r = await emit('room:sit');
+    if (!r.ok) return toast(r.error);
+    store.set('spectate', null);
+  }
+  async function rematch() {
+    const r = await emit('room:rematch');
+    if (!r.ok) toast(r.error);
+  }
+  $('btn-sit').onclick = takeSeat;
 
   const RULE_KEYS = ['handSize', 'stacking', 'drawUntilPlayable', 'sevenZero', 'liar', 'mercyLimit'];
   function collectRules() {
@@ -292,6 +306,9 @@
     $('share-warning').classList.toggle('hidden', !/^(localhost|127\.|\[::1\])/.test(location.hostname));
 
     $('player-count').textContent = `(${room.members.length}/${room.maxPlayers})`;
+    $('spectator-line').textContent = `${room.spectatorCount} watching`;
+    $('spectator-line').classList.toggle('hidden', !room.spectatorCount);
+    $('btn-sit').classList.toggle('hidden', !room.youSpectator || room.members.length >= room.maxPlayers);
     $('member-list').innerHTML = room.members.map((m) => `
       <li class="${m.connected ? '' : 'offline'}">
         ${avatar(m.name)}
@@ -362,11 +379,11 @@
     const myId = room.youId;
     applyTheme(th, g.side);
 
-    $('game-title').innerHTML = `<b>${esc(g.variantName)}</b> <span class="muted">· ${esc(th.name)} · Room ${esc(room.code)}</span>`;
+    $('game-title').innerHTML = `<b>${esc(g.variantName)}</b> <span class="muted">· ${esc(th.name)} · Room ${esc(room.code)}${room.spectatorCount ? ` · ${room.spectatorCount} watching` : ''}</span>`;
 
     // Opponents, in turn order starting after me.
-    const idx = Math.max(0, g.players.findIndex((p) => p.id === myId));
-    const order = g.players.slice(idx + 1).concat(g.players.slice(0, idx)).filter((p) => p.id !== myId);
+    const idx = g.players.findIndex((p) => p.id === myId);
+    const order = idx < 0 ? g.players : g.players.slice(idx + 1).concat(g.players.slice(0, idx));
     $('opponents').innerHTML = order.map((p) => {
       const m = memberOf(p.id);
       const offline = m && !m.connected && !m.isBot;
@@ -422,7 +439,8 @@
     let status;
     if (g.phase === 'over') {
       status = `${esc(nameOf(g.winnerId))} wins`;
-      if (room.hostId === myId) status += ' <button class="btn primary small" id="btn-again">Play again</button> <button class="btn small" id="btn-to-lobby">Lobby</button>';
+      if (!room.youSpectator) status += ' <button class="btn primary small" id="btn-again">Rematch</button>';
+      if (room.hostId === myId) status += ' <button class="btn small" id="btn-to-lobby">Lobby</button>';
     }
     else if (mine && mine.out) status = 'You are out — watch the rest of the game.';
     else if (g.actorId === myId) {
@@ -527,16 +545,18 @@
     if (g.phase === 'over') {
       const isHost = room.hostId === myId;
       const won = g.winnerId === myId;
+      const seatButton = room.youSpectator
+        ? '<button class="btn primary" data-value="sit">Take a seat</button>'
+        : '<button class="btn primary" data-value="rematch">Rematch</button>';
       openModal(`<div class="gameover">
           <div class="go-kicker">${won ? 'Victory' : 'Game over'}</div>
           <h2>${won ? 'You win' : `${esc(nameOf(g.winnerId))} wins`}</h2>
           <p class="muted">${esc(g.variantName)}</p>
-          ${isHost
-            ? '<div class="row center"><button class="btn primary" data-value="again">Play again</button><button class="btn" data-value="lobby">Back to lobby</button></div>'
-            : '<p class="muted">Waiting for the host to start a new game…</p>'}
+          <div class="row center">${seatButton}${isHost ? '<button class="btn" data-value="lobby">Back to lobby</button>' : ''}</div>
           <button class="btn ghost" data-value="close">View table</button>
         </div>`, { key, kind: 'phase' }).then(async (v) => {
-        if (v === 'again') { const r = await emit('room:start'); if (!r.ok) toast(r.error); }
+        if (v === 'rematch') rematch();
+        if (v === 'sit') takeSeat();
         if (v === 'lobby') emit('room:lobby');
       });
       return;
@@ -562,7 +582,7 @@
   }
 
   $('status').addEventListener('click', async (e) => {
-    if (e.target.id === 'btn-again') { const r = await emit('room:start'); if (!r.ok) toast(r.error); }
+    if (e.target.id === 'btn-again') rematch();
     if (e.target.id === 'btn-to-lobby') emit('room:lobby');
   });
   $('btn-draw').onclick = () => sendAction({ type: 'draw' });
@@ -680,15 +700,25 @@
     render();
     toast('You were removed from the room');
   });
+  socket.on('room:closed', () => {
+    room = null;
+    store.set('room', null);
+    store.set('spectate', null);
+    setUrlRoom(null);
+    closeModal();
+    render();
+    toast('The room has closed');
+  });
   socket.on('connect', async () => {
     const saved = store.get('room');
     const name = store.get('name');
     // An invite link for a different room wins over silently rejoining the last room.
     const code = (room && room.code) || (inviteCode && inviteCode !== saved ? null : saved);
     if (code && name) {
-      const res = await emit('room:join', { code, name, token });
+      const res = await emit('room:join', { code, name, token, spectate: store.get('spectate') === '1' });
       if (!res.ok) {
         store.set('room', null);
+        store.set('spectate', null);
         if (room) { room = null; render(); toast(res.error); }
       } else setUrlRoom(res.code);
     }
